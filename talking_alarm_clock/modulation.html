@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,120 +7,16 @@
     <script src="third-party/jquery-3.2.1.min.js"></script>
     <script src="third-party/bootstrap.min.js"></script>
     <script src="audiofile.js"></script>
+    <script language="javascript" type="text/javascript" src="third-party/p5.min.js"></script>
+    <script language="javascript" type="text/javascript" src="third-party/p5.sound.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/1.4.0/wavesurfer.min.js"></script>
+    <script language="javascript" type="text/javascript" src="modulation.js"></script>
 </head>
 <body>
-<script>
-  // create web audio api context
-  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-  // create Oscillator node
-  var oscillator = audioCtx.createOscillator();
-
-  function MakeNoise() {
-    oscillator.type = 'square';
-    oscillator.frequency.value = 440; // value in hertz
-    oscillator.connect(audioCtx.destination);
-    oscillator.start();
-  }
-
-  function StopNoise() {
-    oscillator.stop();
-  }
-</script>
-
-<script>
-  window.AudioContext = window.AudioContext || window.webkitAudioContext;
-
-  var context = new AudioContext();
-
-  function playSound(arr) {
-    var buf = new Float32Array(arr.length)
-    for (var i = 0; i < arr.length; i++) buf[i] = arr[i]
-    var buffer = context.createBuffer(1, buf.length, context.sampleRate)
-    buffer.copyToChannel(buf, 0)
-    var source = context.createBufferSource();
-    source.buffer = buffer;
-    source.connect(context.destination);
-    source.start(0);
-  }
-
-  function khz2hz(khz) {
-    return 1000 * khz;
-  }
-
-  function sineWaveAt(sampleNumber, tone) {
-    var sampleFreq = context.sampleRate / tone
-    return Math.sin(sampleNumber / (sampleFreq / (Math.PI*2)))
-  }
-
-  function playCustomSine(volume, length, tone) {
-    var arr = []
-    //volume = 0.2, seconds = 0.5, tone = khz2hz(24);
-
-    for (var i = 0; i < length; i++) {
-      arr[i] = sineWaveAt(i, tone) * volume;
-    }
-    console.log(arr);
-    playSound(arr);
-  }
-
-  var currentFile = "";
-  function playAudio() {
-    // Check for audio element support.
-    if (window.HTMLAudioElement) {
-      try {
-        var oAudio = document.getElementById('myaudio');
-        var btn = document.getElementById('play');
-        var audioURL = document.getElementById('audiofile');
-
-        //Skip loading if current file hasn't changed.
-        if (audioURL.value !== currentFile) {
-          oAudio.src = audioURL.value;
-          currentFile = audioURL.value;
-        }
-
-        // Tests the paused attribute and set state.
-        if (oAudio.paused) {
-          oAudio.play();
-          btn.textContent = "Pause";
-        }
-        else {
-          oAudio.pause();
-          btn.textContent = "Play";
-        }
-      }
-      catch (e) {
-        // Fail silently but show in F12 developer tools console
-        if(window.console && console.error("Error:" + e));
-      }
-    }
-  }
-
-  // Load AIFF Synchronously
-  function printInfo(decoded) {
-    console.log(decoded.channels.length, 'channels');
-    console.log(decoded.length, 'samples');
-    console.log('Sample rate:', decoded.sampleRate);
-    console.log('Bit depth:', decoded.bitDepth);
-    console.log('Ten random samples:');
-    for (var i = 0; i < 10; i++) {
-      var channel = Math.floor(Math.random() * decoded.channels.length);
-      var index = Math.floor(Math.random() * decoded.length);
-      console.log(decoded.channels[channel][index]);
-    }
-  }
-
-  var textfile = "audio/alexa-time.wav"
-  console.log('Loading AIFF');
-  var request = new AudioFileRequest(textfile, false);
-  request.onSuccess = printInfo;
-  request.send();
-</script>
-
-<button onclick="MakeNoise(); return false;" class="btn btn-success btn-lg" type="submit", id="start_sound">Start</button>
-<button onclick="StopNoise(); return false;" class="btn btn-danger btn-lg" type="submit" id="stop_sound">Stop</button>
-<button onclick="playCustomSine(); return false;" class="btn btn-success btn-lg" type="submit" id="other_sound">Manual sine</button>
-<button onclick="playAudio(); return false;" class="btn btn-success btn-lg" type="submit" id="play">Audio</button>
+<button class="btn btn-success btn-lg" type="submit", id="start_sound">Start</button>
+<button class="btn btn-danger btn-lg" type="submit" id="stop_sound">Stop</button>
+<button class="btn btn-success btn-lg" type="submit" id="other_sound">Manual sine</button>
+<button class="btn btn-success btn-lg" type="submit" id="play">Audio</button>
 <input id="audiofile" value="audio/cuckoo.ogg"/>
 <audio src="audio/cuckoo.ogg" id="myaudio">
     Your browser does not support the <code>audio</code> element.
