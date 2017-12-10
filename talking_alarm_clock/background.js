@@ -145,6 +145,11 @@ var stopAlarm = function() {
 };
 
 var listenForPin = function() {
+  /**
+   * Listen for pins for a set amount of time
+   * Once alarm goes off, listen_for_pin will be set to false
+   * @type {Date}
+   */
   var now = new Date();
   now.setMinutes(now.getMinutes() + 1);
   listen_for_pin = true;
@@ -189,6 +194,10 @@ function isNumeric(words) {
 };
 
 function digitToNumeric(str) {
+  /**
+   * Turn a word-number ("four") into a digit-number ("4")
+   * Pray that none of these assistants allow more than 1 digit numbers
+   */
   switch(str) {
     case "zero": return "0";
     case "one": return "1";
@@ -301,6 +310,18 @@ function enableVoiceRecognition() {
   }
 }
 
+function getMicrophoneStream() {
+  /**
+   * Set up the audio stream; see audiofile.js for details
+   */
+  navigator.getUserMedia = navigator.getUserMedia ||
+      navigator.webkitGetUserMedia ||
+      navigator.mozGetUserMedia;
+
+  navigator.getUserMedia(mediaConstraints, mediaSuccessHandler, mediaErrorHandler)
+}
+
+
 function initBackground() {
   /**
    * Initialize the background script. This script will be re-run each time an extension
@@ -308,6 +329,7 @@ function initBackground() {
    */
   openWelcomePage();
   enableVoiceRecognition();
+  getMicrophoneStream();
   addMessageListeners();
 }
 
