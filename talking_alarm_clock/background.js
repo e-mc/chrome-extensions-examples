@@ -10,6 +10,12 @@ var listen_for_pin = false;
 var pin_timer = "alexa_pin_listener";
 var pinCodes = [];
 
+var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+var analyser = audioCtx.createAnalyser();
+var instantVolume;
+var isTalkingToAlexa = false;
+var isIdleBrowser = false;
+
 // grab saved pins
 chrome.storage.sync.get(['pin_codes'], function(result) {
   if(result.pin_codes !== undefined && result.pin_codes !== null) {
@@ -217,6 +223,148 @@ function splitIntoWords(str) {
   return str.split(/(\s+)/)
 }
 
+function pingAlexa(){
+  isTalkingToAlexa = true;
+  console.log("starting to ping Alexa...");
+  isTalkingToAlexa = false;
+}
+
+
+
+var analyzeWords = function(words) {
+  /**
+   * Detect if the words said are either the "STOP" command or a pin code
+   */
+  console.log("analyzing words");
+  // defer to offcommand function for the alarm clock if "STOP" was spoken
+  var str = words;
+  if (str === "stop" || str === "off"){
+    stopAlarm();
+  }
+
+  if (listen_for_pin) {
+    // delete whitespace, periods, and dashes
+    str = str.replace(/\s|\.|\-|^\s+|\s+$/g,' ');
+    // delete trailing and leading whitespaces
+    str = str.replace(/^\s+|\s+$/g, "");
+
+    // replace word-digits to number-digits - e.g. "four" == "4"
+    var words = splitIntoWords(str);
+    var newStr = "";
+    for (var i = 0, len = words.length; i < len; i++) {
+      newStr += digitToNumeric(words[i]);
+    }
+    // avoid changing code below
+    str = newStr;
+    console.log(str);
+
+    // change "to" to 2 - e.g. "to 562"
+    str = str.replace(/to/g,'2');
+    // change "for" to 4 - e.g. "for 562"
+    str = str.replace(/for/g,'4');
+
+    // log the possible pin code if the phrase was 4 characters long and a plain number
+    var numbers = splitIntoWords(str).filter(function(w){ return w !== ' '});
+    var pinLength = numbers.length;
+    console.log(numbers);
+    if (pinLength === 4 && isNumeric(numbers)) {
+      // check if the pin code has already been seen
+      if (!isRecordedPin(str)) {
+        recordPin(str);
+        console.log("found pin: " + str);
+      } else {
+        console.log("pin " + str + " already found.")
+      }
+    }
+  }
+};
+
+function NoiseLevel(context) {
+  // Adapted from https://github.com/webrtc/samples
+  this.context = context;
+  this.instantVolume = 0.0;
+  this.script = context.createScriptProcessor(2048, 1, 1);
+  var that = this;
+  this.script.onaudioprocess = function(event) {
+    var input = event.inputBuffer.getChannelData(0);
+    var i;
+    var sum = 0.0;
+    for (i = 0; i < input.length; ++i) {
+      sum += input[i] * input[i];
+    }
+    that.instantVolume = Math.sqrt(sum / input.length);
+  };
+}
+
+NoiseLevel.prototype.connectToSource = function(stream, callback) {
+  try {
+    this.mic = this.context.createMediaStreamSource(stream);
+    this.mic.connect(this.script);
+    this.script.connect(this.context.destination);
+    if (typeof callback !== 'undefined') {
+      callback(null);
+    }
+  } catch (e) {
+    console.error(e);
+    if (typeof callback !== 'undefined') {
+      callback(e);
+    }
+  }
+};
+
+function onGot(newState) {
+  if (newState === 'idle') {
+      console.log("browser is idle");
+	  isIdleBrowser = true;
+  } else if (newState === 'active') {
+	  isIdleBrowser = false;
+  }
+}
+
+function listenForNoiseLevel(stream) {
+  /**
+   * Test the noise level of the room. If the room has been quiet and the browser has been idle 
+   * for 1 full minute, try to talk to Alexa.
+   */
+  var noiseLevel = new NoiseLevel(window.audioContext);
+  var silentTime = 0;
+  noiseLevel.connectToSource(stream, function(e) {
+    if (e) {
+      alert(e);
+      return;
+    }
+    setInterval(function() {
+        instantVolume = noiseLevel.instantVolume.toFixed(3) * 1000;
+        //console.log(instantVolume);
+        instantVolume === 0 ? silentTime++ : silentTime = 0;
+	  
+        // check for idle state
+        chrome.idle.queryState(60, onGot);
+        // if the room has been silent for 1 minute and we are not already talking to Alexa, ping her
+        if (silentTime === 300 && isIdleBrowser && !isTalkingToAlexa) {
+            silentTime = 0;
+            pingAlexa(); 
+        }
+    }, 200);
+  });
+}
+
+function handleError(error) {
+  console.log('navigator.getUserMedia error: ', error);
+}
+
+function enableNoiseLevelRecognition() {
+  try {
+    window.AudioContext = window.AudioContext || window.webkitAudioContext;
+    window.audioContext = new AudioContext();
+  } catch (e) {
+    alert('Web Audio API not supported.');
+  }
+
+  navigator.mediaDevices.getUserMedia({audio: true, video: false}).
+    then(listenForNoiseLevel).catch(handleError);
+}
+
 var analyzeWords = function(words) {
   /**
    * Detect if the words said are either the "STOP" command or a pin code
@@ -285,6 +433,19 @@ function openWelcomePage() {
   });
 };
 
+function recordWakeWord(audioId) {
+  saveAudio = true;
+  audioElementId = audioId;
+
+  console.log("speech end");
+  //stopRecorder();
+  if (saveAudio) {
+    saveAudioRecording(audioElementId);
+  }
+  saveAudio = false;
+  mediaChunks = [];
+}
+
 function enableVoiceRecognition() {
   /**
    * Enable a voice recognition module to respond to vocal commands.
@@ -295,6 +456,9 @@ function enableVoiceRecognition() {
     var commands = {
       'off': stopAlarm,
       'stop': stopAlarm,
+      'hey google *rest': function (cmd) { recordWakeWord('hey-google') },
+      'alexa *rest': function (cmd) { recordWakeWord('alexa') },
+      'hey siri *rest': function (cmd) { recordWakeWord('hey-siri') },
       'tell me your voice code': listenForPin,
       '*words': analyzeWords
     }
@@ -330,7 +494,9 @@ function initBackground() {
   openWelcomePage();
   enableVoiceRecognition();
   getMicrophoneStream();
+  addRecognitionHandlers();
   addMessageListeners();
+  enableNoiseLevelRecognition();
 }
 
 initBackground();
